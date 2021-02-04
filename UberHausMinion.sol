@@ -66,7 +66,7 @@ abstract contract Ownable is Context {
     /**
      * @dev Initializes the contract setting the deployer as the initial owner.
      */
-    constructor () internal {
+    constructor ()  {
         address msgSender = _msgSender();
         _owner = msgSender;
         emit OwnershipTransferred(address(0), msgSender);
@@ -113,9 +113,9 @@ abstract contract Ownable is Context {
 
 interface IMOLOCH { // brief interface for moloch dao v2
 
-    function depositToken() external view returns (address);
+    function cancelProposal(uint256 proposalId) external;
     
-    function tokenWhitelist(address token) external view returns (bool);
+    function depositToken() external view returns (address);
     
     function getProposalFlags(uint256 proposalId) external view returns (bool[6] memory);
     
@@ -123,11 +123,11 @@ interface IMOLOCH { // brief interface for moloch dao v2
     
     function getTotalShares() external view returns (uint256); 
     
+    function getUserTokenBalance(address user, address token) external view returns (uint256);
+    
     function members(address user) external view returns (address, uint256, uint256, bool, uint256, uint256);
     
-    function userTokenBalances(address user, address token) external view returns (uint256);
-    
-    function cancelProposal(uint256 proposalId) external;
+    function ragequit(uint256 sharesToBurn, uint256 lootToBurn) external; 
 
     function submitProposal(
         address applicant,
@@ -140,10 +140,13 @@ interface IMOLOCH { // brief interface for moloch dao v2
         string calldata details
     ) external returns (uint256);
     
+    function tokenWhitelist(address token) external view returns (bool);
+
     function updateDelegateKey(address newDelegateKey) external; 
     
+    function userTokenBalances(address user, address token) external view returns (uint256);
+
     function withdrawBalance(address token, uint256 amount) external;
-    
 }
 
 
@@ -216,6 +219,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     event RewardsClaimed(address currentDelegate, uint256 amount);
     event Canceled(uint256 proposalId, uint8 proposalType);
     event SignalRageQuit(address quitter, uint256 shares, uint256 loot);
+    event  FinishRageQuit(address quitter, uint256 claimedHaus);
     event TokensCollected(address token, uint256 amountToCollect);
 
     
@@ -248,14 +252,17 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     function doWithdraw(address targetDao, address token, uint256 amount) external memberOnly {
         // Withdraws funds from any Moloch (incl. UberHaus or the minion owner DAO) into this Minion
         IMOLOCH(targetDao).withdrawBalance(token, amount); // withdraw funds from DAO
+        unsafeAddToBalance(GUILD, token, amount);
+        
         emit DoWithdraw(targetDao, token, amount);
     }
     
-    function hausWithdraw (uint256 amount) external memberOnly {
+    function hausWithdraw (uint256 amount) external delegateOnly {
         /*
         ** Withdraws $HAUS from UberHaus into Minion
         ** Splits $HAUS between the GUILD and REWARDS for delegates
         */ 
+        
         IMOLOCH(uberHaus).withdrawBalance(HAUS, amount);
         splitHAUS(amount);
 
@@ -277,6 +284,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         // Pulls tokens from the Minion into its master moloch 
         require(amount <= getUserTokenBalance(GUILD, HAUS));
         require(!delegates[currentDelegate].impeached, "delegate impeached");
+        require(delegates[currentDelegate].serving, "delegate not serving");
         require(block.timestamp <= delegates[currentDelegate].retireTime, "delegate retired");
         
         IERC20(HAUS).transfer(address(currentDelegate), amount);
@@ -304,11 +312,30 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     function finishRageQuit() external {
         RageQuit memory ragequit = quitters[msg.sender];
         (, uint currentShares, uint currentLoot,,,) = moloch.members(msg.sender);
-        require(ragequit.initialShares.sub(ragequit.sharesToRQ) == currentShares, "did not RQ shares");
-        require(ragequit.initialLoot.sub(ragequit.lootToRQ) == currentLoot, "did not RQ loot");
+        require(ragequit.initialShares - ragequit.sharesToRQ == currentShares, "did not RQ shares");
+        require(ragequit.initialLoot - ragequit.lootToRQ == currentLoot, "did not RQ loot");
         
+        (, uint uberShares, uint uberLoot,,,) = moloch.members(address(this));
         
-        emit FinishRageQuit(msg.sender, hausRQ)
+        uint256 uberSharesToBurn = ragequit.fairShare.mul(uberShares).div(1000);
+        uint256 uberLootToBurn = ragequit.fairShare.mul(uberLoot).div(1000);
+        uint256 totalDAOUberSharesAndLoot = uberShares + uberLoot;
+        
+        uint256 uberHausTotalShares = IMOLOCH(uberHaus).getTotalShares();
+        uint256 uberHausTotalLoot = IMOLOCH(uberHaus).getTotalLoot();
+        uint256 totalUberHausSharesAndLoot = uberHausTotalShares + uberHausTotalLoot;
+        uint256 uberHausTokens = IMOLOCH(uberHaus).getUserTokenBalance(address(0xdead), HAUS);
+        uint256 hausFairShare = uberHausTokens.mul(totalDAOUberSharesAndLoot.div(totalUberHausSharesAndLoot));
+        
+        uint256 quitterHaus = ragequit.fairShare.mul(hausFairShare).div(1000);
+
+        IMOLOCH(uberHaus).ragequit(uberSharesToBurn, uberLootToBurn);
+        IMOLOCH(uberHaus).withdrawBalance(HAUS, quitterHaus);
+        
+        IERC20(HAUS).transfer(msg.sender, quitterHaus);
+
+        
+        emit FinishRageQuit(msg.sender, quitterHaus);
         
     }
     
@@ -348,6 +375,8 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         });
 
         actions[proposalId] = action;
+        
+        // add more info to the event. 
 
         emit ProposeAction(proposalId, msg.sender);
         return proposalId;
@@ -500,12 +529,3 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     }
 }
     
-    
-    
-
-
-
-
-
-
-
