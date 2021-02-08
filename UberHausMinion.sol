@@ -303,7 +303,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         (, uint currentShares, uint currenLoot,,,) = moloch.members(msg.sender);
 
         // Percent out of 1000 that quitter is owed 
-        uint256 fairShare = (sharesAndLootToBurn.div(totalSharesAndLoot)).mul(1000);
+        uint256 fairShare = getFairShare(sharesAndLootToBurn, totalSharesAndLoot);
         quitters[msg.sender] = RageQuit(currentShares, currenLoot, shares, loot, fairShare, 1);
         
         emit SignalRageQuit(msg.sender, shares, loot);
@@ -319,15 +319,15 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         
         uint256 uberSharesToBurn = ragequit.fairShare.mul(uberShares).div(1000);
         uint256 uberLootToBurn = ragequit.fairShare.mul(uberLoot).div(1000);
-        uint256 totalDAOUberSharesAndLoot = uberShares + uberLoot;
+        uint256 totalDAOUberSharesAndLoot = getTotalSharesAndLoot(uberShares, uberLoot);
         
         uint256 uberHausTotalShares = IMOLOCH(uberHaus).getTotalShares();
         uint256 uberHausTotalLoot = IMOLOCH(uberHaus).getTotalLoot();
-        uint256 totalUberHausSharesAndLoot = uberHausTotalShares + uberHausTotalLoot;
+        uint256 totalUberHausSharesAndLoot = getTotalSharesAndLoot(uberHausTotalShares, uberHausTotalLoot);
         uint256 uberHausTokens = IMOLOCH(uberHaus).getUserTokenBalance(address(0xdead), HAUS);
         uint256 hausFairShare = uberHausTokens.mul(totalDAOUberSharesAndLoot.div(totalUberHausSharesAndLoot));
         
-        uint256 quitterHaus = ragequit.fairShare.mul(hausFairShare).div(1000);
+        uint256 quitterHaus = getFairShare(ragequit.fairShare, hausFairShare);
 
         IMOLOCH(uberHaus).ragequit(uberSharesToBurn, uberLootToBurn);
         IMOLOCH(uberHaus).withdrawBalance(HAUS, quitterHaus);
@@ -510,8 +510,15 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         return (daoAmt, delegateReward);
     }
     
+    function getTotalSharesAndLoot(uint256 _shares, uint256 _loot) internal pure returns (uint256 totalSharesAndLoot) {
+        return _shares + _loot;
+    }
+    
+    function getFairShare(uint256 myShare, uint256 totalShare) internal pure returns (uint256){
+        return myShare.div(totalShare).mul(1000);
+    }
+    
     function isMember(address user) public view returns (bool) {
-        
         (, uint shares,,,,) = moloch.members(user);
         return shares > 0;
     }
