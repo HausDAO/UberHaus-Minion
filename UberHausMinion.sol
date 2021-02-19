@@ -234,18 +234,27 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     }
     
     
-    // @Dev - TODO add proxy pattern later. 
+    /*
+     * @Dev TODO add proxy pattern later.
+     * @param _dao The address of the child dao joining UberHaus
+     * @param _uberHaus The address of UberHaus dao
+     * @param _Haus The address of the HAUS token
+     * @param _delegateRewardFactor The percentage out of 10,000 that the delegate will recieve as a reward
+     * @param _DESC Name or description of the minion
+     */  
     
     constructor (
         address _dao, 
         address _uberHaus, 
         address _Haus,
+        uint256 _delegateRewardFactor,
         string memory _DESC
     )  {
         moloch = IMOLOCH(_dao);
         dao = _dao;
         uberHaus = _uberHaus;
         HAUS = _Haus;
+        delegateRewardsFactor = _delegateRewardFactor;
         DESC = _DESC;
         initialized = true; 
     }
@@ -356,7 +365,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         // the proposal without getting the proposal struct from parent moloch
         require(actionTo != address(0), "invalid actionTo");
 
-        uint256 proposalId = IMOLOCH(targetDao).submitProposal(
+        uint256 proposalId = IMOLOCH(dao).submitProposal(
             address(this),
             0,
             0,
@@ -538,3 +547,15 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         userTokenBalances[user][token] -= amount;
     }
 }
+
+
+    
+    
+    
+
+
+
+
+
+
+
