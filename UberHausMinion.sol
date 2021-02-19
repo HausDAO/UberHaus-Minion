@@ -365,7 +365,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         // the proposal without getting the proposal struct from parent moloch
         require(actionTo != address(0), "invalid actionTo");
 
-        uint256 proposalId = IMOLOCH(dao).submitProposal(
+        uint256 proposalId = IMOLOCH(targetDao).submitProposal(
             address(this),
             0,
             0,
@@ -421,7 +421,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         // the proposal without getting the proposal struct from parent moloch
         require(targetDao != address(0), "invalid actionTo");
 
-        uint256 proposalId = IMOLOCH(targetDao).submitProposal(
+        uint256 proposalId = IMOLOCH(moloch).submitProposal(
             address(this),
             0,
             0,
@@ -456,7 +456,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
 
         // execute call
         appointment.executed = true;
-        IMOLOCH(uberHaus).updateDelegateKey(appointment.nominee);
+        IMOLOCH(appointment.dao).updateDelegateKey(appointment.nominee);
         delegates[appointment.nominee] = Delegate(block.timestamp, appointment.retireTime, true, false);
         delegateList.push(appointment.nominee);
         currentDelegate = appointment.nominee;
@@ -479,7 +479,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         emit Canceled(_proposalId, _type);
         moloch.cancelProposal(_proposalId);
     }
-    
 
     
     //  -- Emergency Functions --
@@ -513,7 +512,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     }
     
     function splitHAUS(uint256 amount) internal returns (uint256 daoShare, uint256 delegateShare){
-        uint256 delegateReward = amount.mul(delegateRewardsFactor.div(100));
+        uint256 delegateReward = amount.mul(delegateRewardsFactor.div(1000));
         uint256 daoAmt = amount - delegateReward;
         
         unsafeAddToBalance(REWARDS, HAUS, delegateReward);
