@@ -233,12 +233,15 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         _;
     }
     
-    function init(
+    
+    // @Dev - TODO add proxy pattern later. 
+    
+    constructor (
         address _dao, 
         address _uberHaus, 
         address _Haus,
         string memory _DESC
-    ) external {
+    )  {
         moloch = IMOLOCH(_dao);
         dao = _dao;
         uberHaus = _uberHaus;
@@ -535,4 +538,3 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         userTokenBalances[user][token] -= amount;
     }
 }
-    
