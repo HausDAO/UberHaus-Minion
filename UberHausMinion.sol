@@ -542,6 +542,8 @@ contract CloneFactory {
 contract UberHausMinionFactory is CloneFactory, Ownable {
     
     address immutable public template; // fixed template for minion using eip-1167 proxy pattern
+    address[] public uberMinions; // list of the minions 
+    mapping(address => address) public ourMinions; //mapping minions to DAOs;
     
     event SummonUberMinion(address indexed uberminion, address indexed dao, address uberHaus, address controller, uint256 delegateRewardFactor, string desc, string name);
     
@@ -557,10 +559,25 @@ contract UberHausMinionFactory is CloneFactory, Ownable {
         
         emit SummonUberMinion(address(uberminion), _dao, _uberHaus, _controller, _delegateRewardFactor, _desc, name);
         
+        // add new minion to array and mapping
+        uberMinions.push(address(uberminion));
+        ourMinions[_dao] = address(uberminion);
+        
         return(address(uberminion));
     }
     
 }
+
+
+
+    
+    
+    
+
+
+
+
+
 
 
 
