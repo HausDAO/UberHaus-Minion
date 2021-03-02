@@ -12,7 +12,7 @@ Work in progress and testing on Kovan:
 - test minion 3 - 0x12ddED5e88621D71948781F26F1bbF8fdf93B09E (kleine DAO)
 - test minion 4 - 0x50B0C5c42d29B63dF57c7006f49A5375ca27E45E (unter DAO)
 
-- Minion Template - 0x8ac03922EC657d7Ca37Dba19568c2f2d336186BA
-- Minion Factory - 0xAe056eDe3E8910B02936996E54Db74a80c5d526B
+- Minion Template - 0xbD04Dc022310Ced77ca117eC6b0F4383b231582B
+- Minion Factory - 0xCDD80047C9C329D96917885c9Afb19e985865cD5
 
 
