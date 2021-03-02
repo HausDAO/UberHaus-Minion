@@ -160,11 +160,12 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     address[] public delegateList; // list of child dao delegates
     address public currentDelegate; // current delegate 
     uint256 public delegateRewardsFactor; // percent of HAUS given to delegates 
-    string public DESC; //description of minion
+    string public desc; //description of minion
     bool private initialized; // internally tracks deployment under eip-1167 proxy pattern
     
     address public constant REWARDS = address(0xfeed);
-    address public HAUS; // HAUS token address @dev - will make this a constant for production 
+    address public controller; 
+    address public constant HAUS = 0x12ddED5e88621D71948781F26F1bbF8fdf93B09E; // Kovan HAUS token address 
 
     mapping(uint256 => Action) public actions; // proposalId => Action
     mapping(uint256 => Appointment) public appointments; // proposalId => Appointment
@@ -220,7 +221,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     event Canceled(uint256 proposalId, uint8 proposalType);
     event SignalRageQuit(address quitter, uint256 shares, uint256 loot);
     event FinishRageQuit(address quitter, uint256 claimedHaus);
-    event TokensCollected(address token, uint256 amountToCollect);
+    event SetUberHaus(address uberHaus);
 
     
     modifier memberOnly() {
@@ -243,19 +244,20 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
      * @param _DESC Name or description of the minion
      */  
     
-    constructor (
+    function init(
         address _dao, 
         address _uberHaus, 
-        address _Haus,
+        address _controller,
         uint256 _delegateRewardFactor,
-        string memory _DESC
-    )  {
+        string memory _desc
+    )  public {
+        require(_dao != address(0), "no 0x address");
         moloch = IMOLOCH(_dao);
         dao = _dao;
         uberHaus = _uberHaus;
-        HAUS = _Haus;
+        controller = _controller;
         delegateRewardsFactor = _delegateRewardFactor;
-        DESC = _DESC;
+        desc = _desc;
         initialized = true; 
     }
     
@@ -264,7 +266,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     function doWithdraw(address targetDao, address token, uint256 amount) external memberOnly {
         // Withdraws funds from any Moloch (incl. UberHaus or the minion owner DAO) into this Minion
         IMOLOCH(targetDao).withdrawBalance(token, amount); // withdraw funds from DAO
-
         emit DoWithdraw(targetDao, token, amount);
     }
     
@@ -276,7 +277,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         emit PulledFunds(token, amount);
     }
     
-    function claimDelegateReward() external delegateOnly {
+    function claimDelegateReward() external delegateOnly nonReentrant {
         // Allows delegate to claim rewards once during term
         require(!delegates[currentDelegate].impeached, "delegate impeached");
         require(delegates[currentDelegate].serving, "delegate not serving");
@@ -490,19 +491,76 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         (, uint shares,,,,) = moloch.members(user);
         return shares > 0;
     }
+    
+    function updateUberHaus(address _uberHaus) external returns (address) {
+        // limited admin function to update uberHaus address once
+        // @Dev meant for setting up genesis members
+        require(msg.sender == controller, "only controller");
+        require(uberHaus == address(0), "already updated");
+        uberHaus = _uberHaus;
+        
+        emit SetUberHaus(uberHaus);
+        return uberHaus;
+    }
+}
+
+/*
+The MIT License (MIT)
+Copyright (c) 2018 Murray Software, LLC.
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+contract CloneFactory {
+    function createClone(address target) internal returns (address result) { // eip-1167 proxy pattern adapted for payable minion
+        bytes20 targetBytes = bytes20(target);
+        assembly {
+            let clone := mload(0x40)
+            mstore(clone, 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+            mstore(add(clone, 0x14), targetBytes)
+            mstore(add(clone, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+            result := create(0, clone, 0x37)
+        }
+    }
 }
 
 
+
+contract UberHausMinionFactory is CloneFactory, Ownable {
     
+    address immutable public template; // fixed template for minion using eip-1167 proxy pattern
     
+    event SummonUberMinion(address indexed uberminion, address indexed dao, address uberHaus, address controller, uint256 delegateRewardFactor, string desc, string name);
     
-
-
-
-
-
-
-
+    constructor(address _template)  {
+        template = _template;
+    }
+    
+    // @DEV - zapRate should be entered in whole ETH or xDAI
+    function summonUberHausMinion(address _dao, address _uberHaus, address _controller, uint256 _delegateRewardFactor, string memory _desc) external returns (address) {
+        string memory name = "UberHaus minion";
+        UberHausMinion uberminion = UberHausMinion(createClone(template));
+        uberminion.init(_dao, _uberHaus, _controller, _delegateRewardFactor, _desc);
+        
+        emit SummonUberMinion(address(uberminion), _dao, _uberHaus, _controller, _delegateRewardFactor, _desc, name);
+        
+        return(address(uberminion));
+    }
+    
+}
 
 
 
