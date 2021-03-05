@@ -165,7 +165,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     address public constant REWARDS = address(0xfeed);
     address public controller; 
-    address public constant HAUS = 0x12ddED5e88621D71948781F26F1bbF8fdf93B09E; // Kovan HAUS token address 
+    address public constant HAUS = 0xAb5cC910998Ab6285B4618562F1e17f3728af662; // Kovan HAUS token address 
 
     mapping(uint256 => Action) public actions; // proposalId => Action
     mapping(uint256 => Appointment) public appointments; // proposalId => Appointment
@@ -193,8 +193,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     }
     
     struct Delegate {
-        uint256 appointmentTime;
-        uint256 retireTime;
         bool rewarded;
         bool serving; 
         bool impeached; 
@@ -248,6 +246,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         address _dao, 
         address _uberHaus, 
         address _controller,
+        address _initialDelegate,
         uint256 _delegateRewardFactor,
         string memory _desc
     )  public {
@@ -256,9 +255,14 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         dao = _dao;
         uberHaus = _uberHaus;
         controller = _controller;
+        currentDelegate = _initialDelegate;
         delegateRewardsFactor = _delegateRewardFactor;
         desc = _desc;
         initialized = true; 
+        
+        delegates[_initialDelegate] = Delegate(false, true, false);
+        delegateList.push(_initialDelegate);
+        
     }
     
     //  -- Withdraw Functions --
@@ -281,7 +285,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         // Allows delegate to claim rewards once during term
         require(!delegates[currentDelegate].impeached, "delegate impeached");
         require(delegates[currentDelegate].serving, "delegate not serving");
-        require(block.timestamp <= delegates[currentDelegate].retireTime, "delegate retired");
         require(!delegates[currentDelegate].rewarded, "delegate already rewarded");
         
         uint256 hausBalance = IERC20(HAUS).balanceOf(address(this));
@@ -295,15 +298,15 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     function signalRageQuit(uint256 shares, uint256 loot) external memberOnly {
         // get total shares and loot for child dao
-        uint256 totalShares = moloch.getTotalShares();
-        uint256 totalLoot = moloch.getTotalLoot();
+        uint256 totalShares = IMOLOCH(moloch).getTotalShares();
+        uint256 totalLoot = IMOLOCH(moloch).getTotalLoot();
         uint256 totalSharesAndLoot = totalShares + totalLoot;
-        uint256 sharesAndLootToBurn = shares + loot;
-        (, uint currentShares, uint currenLoot,,,) = moloch.members(msg.sender);
+        (, uint currentShares, uint currentLoot,,,) = IMOLOCH(moloch).members(msg.sender);
+        uint256 sharesAndLootToBurn = currentShares + currentLoot;
 
         // Percent out of 1000 that quitter is owed 
         uint256 fairShare = getFairShare(sharesAndLootToBurn, totalSharesAndLoot);
-        quitters[msg.sender] = RageQuit(currentShares, currenLoot, shares, loot, fairShare, 1);
+        quitters[msg.sender] = RageQuit(currentShares, currentLoot, shares, loot, fairShare, 1);
         
         emit SignalRageQuit(msg.sender, shares, loot);
     }
@@ -442,7 +445,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         // execute call
         appointment.executed = true;
         IMOLOCH(appointment.dao).updateDelegateKey(appointment.nominee);
-        delegates[appointment.nominee] = Delegate(block.timestamp, appointment.retireTime, true, false, false);
+        delegates[appointment.nominee] = Delegate(false, true, false);
         delegateList.push(appointment.nominee);
         currentDelegate = appointment.nominee;
         
@@ -478,6 +481,13 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     
     //  -- Helper Functions --
+    
+    function approveUberHaus() external memberOnly {
+        // function to make it easier for DAOs to join uberHaus without having to first do a proposal to approve uberHaus to spend HAUS
+        require(uberHaus != address(0), "no uberhaus set");
+        uint256 wad = IERC20(HAUS).balanceOf(address(this));
+        IERC20(HAUS).approve(uberHaus, wad);
+    }
     
     function getTotalSharesAndLoot(uint256 _shares, uint256 _loot) internal pure returns (uint256 totalSharesAndLoot) {
         return _shares + _loot;
@@ -545,19 +555,19 @@ contract UberHausMinionFactory is CloneFactory, Ownable {
     address[] public uberMinions; // list of the minions 
     mapping(address => address) public ourMinions; //mapping minions to DAOs;
     
-    event SummonUberMinion(address indexed uberminion, address indexed dao, address uberHaus, address controller, uint256 delegateRewardFactor, string desc, string name);
+    event SummonUberMinion(address indexed uberminion, address indexed dao, address uberHaus, address controller, address initialDelegate, uint256 delegateRewardFactor, string desc, string name);
     
     constructor(address _template)  {
         template = _template;
     }
     
     // @DEV - zapRate should be entered in whole ETH or xDAI
-    function summonUberHausMinion(address _dao, address _uberHaus, address _controller, uint256 _delegateRewardFactor, string memory _desc) external returns (address) {
+    function summonUberHausMinion(address _dao, address _uberHaus, address _controller, address _initialDelegate, uint256 _delegateRewardFactor, string memory _desc) external returns (address) {
         string memory name = "UberHaus minion";
         UberHausMinion uberminion = UberHausMinion(createClone(template));
-        uberminion.init(_dao, _uberHaus, _controller, _delegateRewardFactor, _desc);
+        uberminion.init(_dao, _uberHaus, _controller, _initialDelegate, _delegateRewardFactor, _desc);
         
-        emit SummonUberMinion(address(uberminion), _dao, _uberHaus, _controller, _delegateRewardFactor, _desc, name);
+        emit SummonUberMinion(address(uberminion), _dao, _uberHaus, _controller, _initialDelegate, _delegateRewardFactor, _desc, name);
         
         // add new minion to array and mapping
         uberMinions.push(address(uberminion));
@@ -579,11 +589,6 @@ contract UberHausMinionFactory is CloneFactory, Ownable {
 
 
 
-
-
-    
-    
-    
 
 
 
