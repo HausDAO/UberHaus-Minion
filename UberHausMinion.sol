@@ -263,6 +263,10 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         delegates[_initialDelegate] = Delegate(false, true, false);
         delegateList.push(_initialDelegate);
         
+        if(uberHaus != address(0)){
+            IERC20(HAUS).approve(uberHaus, uint256(-1));
+        }
+        
     }
     
     //  -- Withdraw Functions --
@@ -561,7 +565,7 @@ contract UberHausMinionFactory is CloneFactory, Ownable {
         template = _template;
     }
     
-    // @DEV - zapRate should be entered in whole ETH or xDAI
+
     function summonUberHausMinion(address _dao, address _uberHaus, address _controller, address _initialDelegate, uint256 _delegateRewardFactor, string memory _desc) external returns (address) {
         string memory name = "UberHaus minion";
         UberHausMinion uberminion = UberHausMinion(createClone(template));
@@ -583,12 +587,6 @@ contract UberHausMinionFactory is CloneFactory, Ownable {
     
     
     
-
-
-
-
-
-
 
 
 
