@@ -251,6 +251,8 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         string memory _desc
     )  public {
         require(_dao != address(0), "no 0x address");
+        require(!initialized, "already initialized");
+        require(isMember(_initialDelegate), "deleagte !member");
         moloch = IMOLOCH(_dao);
         dao = _dao;
         uberHaus = _uberHaus;
@@ -317,27 +319,33 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     function finishRageQuit() external {
         RageQuit memory ragequit = quitters[msg.sender];
+        
+        // Check member actually RQ correct amount of shares
         (, uint currentShares, uint currentLoot,,,) = moloch.members(msg.sender);
         require(ragequit.initialShares - ragequit.sharesToRQ == currentShares, "did not RQ shares");
         require(ragequit.initialLoot - ragequit.lootToRQ == currentLoot, "did not RQ loot");
         
-        (, uint uberShares, uint uberLoot,,,) = moloch.members(address(this));
-        
+        // Get minion shares in UberHaus
+        (, uint uberShares, uint uberLoot,,,) = IMOLOCH(uberHaus).members(address(this));
+
+        // Calc number of minion's UberHaus shares to burn
         uint256 uberSharesToBurn = ragequit.fairShare.mul(uberShares).div(1000);
         uint256 uberLootToBurn = ragequit.fairShare.mul(uberLoot).div(1000);
-        uint256 totalDAOUberSharesAndLoot = getTotalSharesAndLoot(uberShares, uberLoot);
         
+        // Calc number of HAUS to withdraw post RQ and send to user
+        uint256 totalDAOUberSharesAndLoot = getTotalSharesAndLoot(uberShares, uberLoot);
         uint256 uberHausTotalShares = IMOLOCH(uberHaus).getTotalShares();
         uint256 uberHausTotalLoot = IMOLOCH(uberHaus).getTotalLoot();
         uint256 totalUberHausSharesAndLoot = getTotalSharesAndLoot(uberHausTotalShares, uberHausTotalLoot);
         uint256 uberHausTokens = IMOLOCH(uberHaus).getUserTokenBalance(address(0xdead), HAUS);
         uint256 hausFairShare = uberHausTokens.mul(totalDAOUberSharesAndLoot.div(totalUberHausSharesAndLoot));
-        
         uint256 quitterHaus = getFairShare(ragequit.fairShare, hausFairShare);
-
+        
+        // RQ and withdraw the right HAUS balance
         IMOLOCH(uberHaus).ragequit(uberSharesToBurn, uberLootToBurn);
         IMOLOCH(uberHaus).withdrawBalance(HAUS, quitterHaus);
         
+        // Transfer the HAUS balance owed to RQer
         IERC20(HAUS).transfer(msg.sender, quitterHaus);
 
         
