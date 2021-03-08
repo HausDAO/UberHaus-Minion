@@ -252,7 +252,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     )  public {
         require(_dao != address(0), "no 0x address");
         require(!initialized, "already initialized");
-        require(isMember(_initialDelegate), "deleagte !member");
         moloch = IMOLOCH(_dao);
         dao = _dao;
         uberHaus = _uberHaus;
@@ -261,6 +260,9 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         delegateRewardsFactor = _delegateRewardFactor;
         desc = _desc;
         initialized = true; 
+        
+        require(isMember(_initialDelegate), "delegate !member");
+
         
         delegates[_initialDelegate] = Delegate(false, true, false);
         delegateList.push(_initialDelegate);
