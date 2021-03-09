@@ -159,9 +159,11 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     address public uberHaus; // address of uberHaus 
     address[] public delegateList; // list of child dao delegates
     address public currentDelegate; // current delegate 
+    address public initialDelegate; // initial delegate if set at summoning
     uint256 public delegateRewardsFactor; // percent of HAUS given to delegates 
     string public desc; //description of minion
     bool private initialized; // internally tracks deployment under eip-1167 proxy pattern
+    bool private initialDelegation; // tracks whether initial delegate has been appointed
     
     address public constant REWARDS = address(0xfeed);
     address public controller; 
@@ -257,6 +259,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         uberHaus = _uberHaus;
         controller = _controller;
         currentDelegate = _initialDelegate;
+        initialDelegate = _initialDelegate;
         delegateRewardsFactor = _delegateRewardFactor;
         desc = _desc;
         initialized = true; 
@@ -269,6 +272,8 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         
         if(uberHaus != address(0)){
             IERC20(HAUS).approve(uberHaus, uint256(-1));
+            setInitialDelegate();
+            initialDelegation == true;
         }
         
     }
@@ -291,9 +296,11 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     function claimDelegateReward() external delegateOnly nonReentrant {
         // Allows delegate to claim rewards once during term
-        require(!delegates[currentDelegate].impeached, "delegate impeached");
-        require(delegates[currentDelegate].serving, "delegate not serving");
-        require(!delegates[currentDelegate].rewarded, "delegate already rewarded");
+        Delegate memory del = delegates[currentDelegate];
+        
+        require(!del.impeached, "delegate impeached");
+        require(del.serving, "delegate not serving");
+        require(!del.rewarded, "delegate already rewarded");
         
         uint256 hausBalance = IERC20(HAUS).balanceOf(address(this));
         uint256 rewards = hausBalance.mul(delegateRewardsFactor / 10000);
@@ -525,6 +532,14 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         
         emit SetUberHaus(uberHaus);
         return uberHaus;
+    }
+    
+    function setInitialDelegate() public {
+        require(uberHaus != address(0), "uberHaus !set");
+        require(!initialDelegation, "already set");
+        require(initialDelegate == currentDelegate, "new delegate"); 
+        IMOLOCH(uberHaus).updateDelegateKey(initialDelegate);
+        initialDelegation == true;
     }
 }
 
