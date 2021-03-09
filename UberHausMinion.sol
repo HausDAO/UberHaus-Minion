@@ -266,14 +266,11 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         
         require(isMember(_initialDelegate), "delegate !member");
 
-        
         delegates[_initialDelegate] = Delegate(false, true, false);
         delegateList.push(_initialDelegate);
         
         if(uberHaus != address(0)){
             IERC20(HAUS).approve(uberHaus, uint256(-1));
-            setInitialDelegate();
-            initialDelegation == true;
         }
         
     }
@@ -316,8 +313,9 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         uint256 totalShares = IMOLOCH(moloch).getTotalShares();
         uint256 totalLoot = IMOLOCH(moloch).getTotalLoot();
         uint256 totalSharesAndLoot = totalShares + totalLoot;
-        (, uint currentShares, uint currentLoot,,,) = IMOLOCH(moloch).members(msg.sender);
-        uint256 sharesAndLootToBurn = currentShares + currentLoot;
+        uint256 currentShares = getUserShares(address(moloch), msg.sender);
+        uint256 currentLoot = getUserLoot(address(moloch), msg.sender);
+        uint256 sharesAndLootToBurn = getTotalSharesAndLoot(currentShares, currentLoot);
 
         // Percent out of 1000 that quitter is owed 
         uint256 fairShare = getFairShare(sharesAndLootToBurn, totalSharesAndLoot);
@@ -512,6 +510,16 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     function getTotalSharesAndLoot(uint256 _shares, uint256 _loot) internal pure returns (uint256 totalSharesAndLoot) {
         return _shares + _loot;
+    }
+    
+    function getUserShares(address _dao, address _user) public view returns (uint256) {
+        (, uint256 shares,,,,) = IMOLOCH(_dao).members(_user);
+        return shares;
+    }
+    
+    function getUserLoot(address _dao, address _user) public view returns (uint256) {
+        (,, uint256 loot,,,) = IMOLOCH(_dao).members(_user);
+        return loot;
     }
     
     function getFairShare(uint256 myShare, uint256 totalShare) internal pure returns (uint256){
