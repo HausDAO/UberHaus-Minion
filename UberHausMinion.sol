@@ -154,9 +154,11 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     
     IMOLOCH public moloch;
+    IERC20 public haus;
     
     address public dao; // dao that manages minion 
     address public uberHaus; // address of uberHaus 
+    address public controller; // address of person who can update uberHaus (for pre-UH minions)
     address[] public delegateList; // list of child dao delegates
     address public currentDelegate; // current delegate 
     address public initialDelegate; // initial delegate if set at summoning
@@ -166,13 +168,12 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     bool private initialDelegation; // tracks whether initial delegate has been appointed
     
     address public constant REWARDS = address(0xfeed);
-    address public controller; 
     address public constant HAUS = 0xAb5cC910998Ab6285B4618562F1e17f3728af662; // Kovan HAUS token address 
+    uint256 public constant DIVIDER = 1000;
 
     mapping(uint256 => Action) public actions; // proposalId => Action
     mapping(uint256 => Appointment) public appointments; // proposalId => Appointment
     mapping(address => Delegate) public delegates; // delegates of child dao
-    mapping(address => RageQuit) public quitters; // rage quitters
     mapping(address => mapping(address => uint256)) public userTokenBalances;
 
     
@@ -200,14 +201,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         bool impeached; 
     }
     
-    struct RageQuit {
-        uint256 initialShares;
-        uint256 initialLoot;
-        uint256 sharesToRQ;
-        uint256 lootToRQ;
-        uint256 fairShare; 
-        uint8 status; // 1 - requested, 2 - complete 
-    }
 
     event ProposeAction(uint256 proposalId, address proposer);
     event ProposeAppointment(uint256 proposalId, address proposer, address nominee, uint256 retireTime);
@@ -219,8 +212,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     event PulledFunds(address token, uint256 amount);
     event RewardsClaimed(address currentDelegate, uint256 amount);
     event Canceled(uint256 proposalId, uint8 proposalType);
-    event SignalRageQuit(address quitter, uint256 shares, uint256 loot);
-    event FinishRageQuit(address quitter, uint256 claimedHaus);
     event SetUberHaus(address uberHaus);
 
     
@@ -236,7 +227,6 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     
     
     /*
-     * @Dev TODO add proxy pattern later.
      * @param _dao The address of the child dao joining UberHaus
      * @param _uberHaus The address of UberHaus dao
      * @param _Haus The address of the HAUS token
@@ -269,8 +259,9 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         delegates[_initialDelegate] = Delegate(false, true, false);
         delegateList.push(_initialDelegate);
         
+        // Approve HAUS if UberHaus has been summonned
         if(uberHaus != address(0)){
-            IERC20(HAUS).approve(uberHaus, uint256(-1));
+            haus.approve(uberHaus, uint256(-1));
         }
         
     }
@@ -299,64 +290,13 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         require(del.serving, "delegate not serving");
         require(!del.rewarded, "delegate already rewarded");
         
-        uint256 hausBalance = IERC20(HAUS).balanceOf(address(this));
-        uint256 rewards = hausBalance.mul(delegateRewardsFactor / 10000);
+        uint256 hausBalance = haus.balanceOf(address(this));
+        uint256 rewards = hausBalance.mul(delegateRewardsFactor.div(DIVIDER));
         
-        IERC20(HAUS).transfer(address(currentDelegate), rewards);
+        haus.transfer(address(currentDelegate), rewards);
         delegates[currentDelegate].rewarded = true;
 
         emit RewardsClaimed(currentDelegate, rewards);
-    }
-    
-    function signalRageQuit(uint256 shares, uint256 loot) external memberOnly {
-        // get total shares and loot for child dao
-        uint256 totalShares = IMOLOCH(moloch).getTotalShares();
-        uint256 totalLoot = IMOLOCH(moloch).getTotalLoot();
-        uint256 totalSharesAndLoot = totalShares + totalLoot;
-        uint256 currentShares = getUserShares(address(moloch), msg.sender);
-        uint256 currentLoot = getUserLoot(address(moloch), msg.sender);
-        uint256 sharesAndLootToBurn = getTotalSharesAndLoot(currentShares, currentLoot);
-
-        // Percent out of 1000 that quitter is owed 
-        uint256 fairShare = getFairShare(sharesAndLootToBurn, totalSharesAndLoot);
-        quitters[msg.sender] = RageQuit(currentShares, currentLoot, shares, loot, fairShare, 1);
-        
-        emit SignalRageQuit(msg.sender, shares, loot);
-    }
-    
-    function finishRageQuit() external {
-        RageQuit memory ragequit = quitters[msg.sender];
-        
-        // Check member actually RQ correct amount of shares
-        (, uint currentShares, uint currentLoot,,,) = moloch.members(msg.sender);
-        require(ragequit.initialShares - ragequit.sharesToRQ == currentShares, "did not RQ shares");
-        require(ragequit.initialLoot - ragequit.lootToRQ == currentLoot, "did not RQ loot");
-        
-        // Get minion shares in UberHaus
-        (, uint uberShares, uint uberLoot,,,) = IMOLOCH(uberHaus).members(address(this));
-
-        // Calc number of minion's UberHaus shares to burn
-        uint256 uberSharesToBurn = ragequit.fairShare.mul(uberShares).div(1000);
-        uint256 uberLootToBurn = ragequit.fairShare.mul(uberLoot).div(1000);
-        
-        // Calc number of HAUS to withdraw post RQ and send to user
-        uint256 totalDAOUberSharesAndLoot = getTotalSharesAndLoot(uberShares, uberLoot);
-        uint256 uberHausTotalShares = IMOLOCH(uberHaus).getTotalShares();
-        uint256 uberHausTotalLoot = IMOLOCH(uberHaus).getTotalLoot();
-        uint256 totalUberHausSharesAndLoot = getTotalSharesAndLoot(uberHausTotalShares, uberHausTotalLoot);
-        uint256 uberHausTokens = IMOLOCH(uberHaus).getUserTokenBalance(address(0xdead), HAUS);
-        uint256 hausFairShare = uberHausTokens.mul(totalDAOUberSharesAndLoot.div(totalUberHausSharesAndLoot));
-        uint256 quitterHaus = getFairShare(ragequit.fairShare, hausFairShare);
-        
-        // RQ and withdraw the right HAUS balance
-        IMOLOCH(uberHaus).ragequit(uberSharesToBurn, uberLootToBurn);
-        IMOLOCH(uberHaus).withdrawBalance(HAUS, quitterHaus);
-        
-        // Transfer the HAUS balance owed to RQer
-        IERC20(HAUS).transfer(msg.sender, quitterHaus);
-
-        
-        emit FinishRageQuit(msg.sender, quitterHaus);
     }
     
     //  -- Proposal Functions --
@@ -504,27 +444,10 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     function approveUberHaus() external memberOnly {
         // function to make it easier for DAOs to join uberHaus without having to first do a proposal to approve uberHaus to spend HAUS
         require(uberHaus != address(0), "no uberhaus set");
-        uint256 wad = IERC20(HAUS).balanceOf(address(this));
-        IERC20(HAUS).approve(uberHaus, wad);
+        uint256 wad = haus.balanceOf(address(this));
+        haus.approve(uberHaus, wad);
     }
     
-    function getTotalSharesAndLoot(uint256 _shares, uint256 _loot) internal pure returns (uint256 totalSharesAndLoot) {
-        return _shares + _loot;
-    }
-    
-    function getUserShares(address _dao, address _user) public view returns (uint256) {
-        (, uint256 shares,,,,) = IMOLOCH(_dao).members(_user);
-        return shares;
-    }
-    
-    function getUserLoot(address _dao, address _user) public view returns (uint256) {
-        (,, uint256 loot,,,) = IMOLOCH(_dao).members(_user);
-        return loot;
-    }
-    
-    function getFairShare(uint256 myShare, uint256 totalShare) internal pure returns (uint256){
-        return myShare.div(totalShare).mul(1000);
-    }
     
     function isMember(address user) public view returns (bool) {
         (, uint shares,,,,) = moloch.members(user);
@@ -608,6 +531,7 @@ contract UberHausMinionFactory is CloneFactory, Ownable {
         
         // add new minion to array and mapping
         uberMinions.push(address(uberminion));
+        // @Dev summoning a new minion for a DAO updates the mapping 
         ourMinions[_dao] = address(uberminion);
         
         return(address(uberminion));
