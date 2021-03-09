@@ -244,7 +244,9 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     )  public {
         require(_dao != address(0), "no 0x address");
         require(!initialized, "already initialized");
+        
         moloch = IMOLOCH(_dao);
+        haus = IERC20(HAUS);
         dao = _dao;
         uberHaus = _uberHaus;
         controller = _controller;
