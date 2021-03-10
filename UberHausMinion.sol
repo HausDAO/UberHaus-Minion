@@ -546,7 +546,7 @@ contract UberHausMinionFactory is CloneFactory {
         // add new minion to array and mapping
         uberMinions.push(address(uberminion));
         // @Dev summoning a new minion for a DAO updates the mapping 
-        ourMinions[_dao][_id] == address(uberminion); 
+        ourMinions[_dao][_id] = address(uberminion); 
         
         return(address(uberminion));
     }
@@ -556,9 +556,10 @@ contract UberHausMinionFactory is CloneFactory {
         return shares > 0;
     }
     
-    function updateOwner(address _newOwner) external returns (bool) {
+    function updateOwner(address _newOwner) external returns (address) {
         require(msg.sender == owner, "only owner");
         owner = _newOwner;
+        return owner;
     }
     
 }
