@@ -169,7 +169,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     bool private initialDelegation; // tracks whether initial delegate has been appointed
     
     address public constant REWARDS = address(0xfeed);
-    address public constant HAUS = 0xb0C5f3100A4d9d9532a4CfD68c55F1AE8da987Eb; // Kovan HAUS token address 
+    address public constant HAUS = 0xAb5cC910998Ab6285B4618562F1e17f3728af662; //0xb0C5f3100A4d9d9532a4CfD68c55F1AE8da987Eb; xDAI HAUS token address 
     uint256 public constant DIVIDER = 1000;
 
     mapping(uint256 => Action) public actions; // proposalId => Action
@@ -310,7 +310,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
     //  -- Proposal Functions --
     
     function proposeAction(
-        address targetDao,
+        address targetDao, // defaults to childDAO
         address actionTo,
         address token,
         uint256 actionValue,
@@ -388,7 +388,7 @@ contract UberHausMinion is Ownable, ReentrancyGuard {
         );
 
         Appointment memory appointment = Appointment({
-            dao: targetDao,
+            dao: targetDao, 
             nominee: nominee,
             retireTime: retireTime,
             proposer: msg.sender,
@@ -525,7 +525,7 @@ contract UberHausMinionFactory is CloneFactory {
     uint256 public counter; // counter to prevent overwriting minions
     mapping(address => mapping(uint256 => address)) public ourMinions; //mapping minions to DAOs;
     
-    event SummonUberMinion(address indexed uberminion, address indexed dao, address uberHaus, address controller, address initialDelegate, uint256 delegateRewardFactor, string desc, string name);
+    event SummonUberMinion(address indexed uberminion, address indexed dao, address uberHaus, address controller, address initialDelegate, uint256 delegateRewardFactor, uint256 minionId, string desc, string name);
     
     constructor(address _template)  {
         template = _template;
@@ -537,16 +537,16 @@ contract UberHausMinionFactory is CloneFactory {
         require(isMember(_dao) || msg.sender == owner, "!member and !owner");
         
         string memory name = "UberHaus minion";
-        uint256 _id = counter ++;
+        uint256 _minionId = counter ++;
         UberHausMinion uberminion = UberHausMinion(createClone(template));
-        uberminion.init(_dao, _uberHaus, _controller, _initialDelegate, _delegateRewardFactor, _id, _desc);
+        uberminion.init(_dao, _uberHaus, _controller, _initialDelegate, _delegateRewardFactor, _minionId, _desc);
         
-        emit SummonUberMinion(address(uberminion), _dao, _uberHaus, _controller, _initialDelegate, _delegateRewardFactor, _desc, name);
+        emit SummonUberMinion(address(uberminion), _dao, _uberHaus, _controller, _initialDelegate, _delegateRewardFactor, _minionId, _desc, name);
         
         // add new minion to array and mapping
         uberMinions.push(address(uberminion));
         // @Dev summoning a new minion for a DAO updates the mapping 
-        ourMinions[_dao][_id] = address(uberminion); 
+        ourMinions[_dao][_minionId] = address(uberminion); 
         
         return(address(uberminion));
     }
