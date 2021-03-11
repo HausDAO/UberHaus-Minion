@@ -12,8 +12,8 @@ UberHaus Minion, an emissary traveling between all of our hauses and the UberHAU
 - MINION FACTORY - 0x03042577463E3820F9cA6Ca3906BAad599ba9382
 
 ## xDAI Production 
-- Minion Template: 0xA403571f2F13c48f24a2A6c9F520d24163909657
-- Minion Factory: 0x65f92d0b3f5d5684a4fd51aBa737bA74ccbAEAf6
+- Minion Template: 0xE644f7a3D5cEc740A3d34aCEb4aAEafc43aabDD4
+- Minion Factory: 0xf5106077892992B84c33C35CA8763895eb80B298
 
 
 
